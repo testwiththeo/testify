@@ -1,0 +1,25 @@
+{% for page in pages %}
+import { {{ page.class_name }} } from '{{ page.import_path }}';
+{% endfor %}
+
+describe({{ test.describe_block | ts_string }}, () => {
+{% for scenario in test.scenarios %}
+  it({{ scenario.name | ts_string }}, () => {
+{% for page_object in pages %}
+    const {{ page_object.variable_name }} = new {{ page_object.class_name }}();
+{% endfor %}
+{% for page_object in pages %}
+    {{ page_object.variable_name }}.visit();
+{% endfor %}
+{% if not pages %}
+    cy.visit('/');
+{% endif %}
+{% for step in scenario.steps %}
+    {{ cypress_step(step) }}
+{% endfor %}
+{% for assertion in scenario.assertions %}
+    {{ cypress_assertion(assertion) }}
+{% endfor %}
+  });
+{% endfor %}
+});

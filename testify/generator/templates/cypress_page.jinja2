@@ -1,0 +1,11 @@
+export class {{ page.class_name }} {
+  visit(): void {
+    cy.visit({{ page.route | ts_string }});
+  }
+
+{% for selector in page.selectors %}
+  get {{ selector.property_name }}() {
+    return cy.get({{ selector.value | ts_string }});
+  }
+{% endfor %}
+}

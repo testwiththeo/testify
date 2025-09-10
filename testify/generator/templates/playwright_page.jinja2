@@ -1,0 +1,19 @@
+import type { Locator, Page } from '@playwright/test';
+
+export class {{ page.class_name }} {
+  readonly page: Page;
+{% for selector in page.selectors %}
+  readonly {{ selector.property_name }}: Locator;
+{% endfor %}
+
+  constructor(page: Page) {
+    this.page = page;
+{% for selector in page.selectors %}
+    this.{{ selector.property_name }} = page.locator({{ selector.value | ts_string }});
+{% endfor %}
+  }
+
+  async goto(): Promise<void> {
+    await this.page.goto({{ page.route | ts_string }});
+  }
+}

@@ -1,0 +1,23 @@
+import { test, expect } from '@playwright/test';
+{% for page in pages %}
+import { {{ page.class_name }} } from '{{ page.import_path }}';
+{% endfor %}
+
+test.describe({{ test.describe_block | ts_string }}, () => {
+{% for scenario in test.scenarios %}
+  test({{ scenario.name | ts_string }}, async ({ page }) => {
+{% for page_object in pages %}
+    const {{ page_object.variable_name }} = new {{ page_object.class_name }}(page);
+{% endfor %}
+{% for page_object in pages %}
+    await {{ page_object.variable_name }}.goto();
+{% endfor %}
+{% for step in scenario.steps %}
+    {{ playwright_step(step) }}
+{% endfor %}
+{% for assertion in scenario.assertions %}
+    {{ playwright_assertion(assertion) }}
+{% endfor %}
+  });
+{% endfor %}
+});
