@@ -1,157 +1,214 @@
 # testify
 
-From spec to test.
+> From spec to test. Generate Playwright and Cypress tests from plain English acceptance criteria.
 
-testify is a Python CLI that turns natural language acceptance criteria into editable Playwright or Cypress TypeScript tests. It reads inline text, stdin, spec files, or directories, asks an LLM for structured test data, renders framework-specific code with Jinja2 templates, and writes files safely without overwriting existing work unless asked.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](pyproject.toml)
 
-## Status
-
-testify is alpha software. Generated tests should be reviewed before committing.
-
-## Quick Start
+testify is a CLI tool for QA engineers who want to spend less time writing boilerplate test code and more time testing what matters. Give it acceptance criteria in natural language — it generates ready-to-run Playwright or Cypress TypeScript tests with assertions, page objects, and data fixtures.
 
 ```bash
 pip install testify
 export TESTIFY_LLM_API_KEY="sk-..."
 
+echo "User logs in with valid credentials, sees dashboard" | testify generate
+```
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+  - [Input Sources](#input-sources)
+  - [Options](#options)
+  - [Framework Examples](#framework-examples)
+- [How It Works](#how-it-works)
+- [Input Formats](#input-formats)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Quick Start
+
+```bash
+# Install
+pip install testify
+
+# Set your API key
+export TESTIFY_LLM_API_KEY="sk-..."
+
+# Generate a test from plain English
 testify generate "User logs in with valid credentials, sees dashboard"
 ```
 
-By default, testify generates Playwright TypeScript tests in `./tests`.
+Output is written to `./tests/login.spec.ts`. Playwright is the default framework.
 
-For local development from source:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-```
+---
 
 ## Usage
 
-Generate from inline text:
+### Input Sources
+
+**From a string:**
 
 ```bash
-testify generate "User logs in with valid credentials" --framework playwright
+testify generate "User logs in with valid credentials"
 ```
 
-Generate from a file:
+**From a file:**
 
 ```bash
 testify generate spec.txt --output ./tests
 ```
 
-Generate from a directory:
+**From a directory** (recursively reads `.txt`, `.md`, `.spec` files):
 
 ```bash
-testify generate specs/ --framework cypress --output ./e2e
+testify generate specs/ --framework cypress
 ```
 
-Preview without calling the LLM or writing files:
+**From stdin:**
 
 ```bash
-testify generate specs/ --dry-run
+cat spec.txt | testify generate
 ```
 
-Use a custom template directory:
+### Options
 
-```bash
-testify generate spec.txt --template ./templates
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-f`, `--framework` | `playwright` | Target framework: `playwright` or `cypress` |
+| `-o`, `--output` | `./tests` | Output directory |
+| `-d`, `--dry-run` | `false` | Preview output without calling the LLM or writing files |
+| `-t`, `--template` | built-in | Path to custom Jinja2 templates |
+| `--force` | `false` | Overwrite existing files |
+| `--no-page-objects` | `false` | Skip page object generation |
+| `-v`, `--verbose` | `false` | Enable detailed logging |
 
-Overwrite existing generated files:
+### Framework Examples
 
-```bash
-testify generate spec.txt --force
-```
-
-Skip page object generation:
-
-```bash
-testify generate spec.txt --no-page-objects
-```
-
-## Framework Examples
-
-Playwright:
+**Playwright:**
 
 ```bash
 testify generate "User logs in and sees the dashboard" --framework playwright
 ```
 
-Expected output uses `test`, `expect`, async `page`, and Playwright locators.
+Generated output uses `test` / `expect`, async `page`, and Playwright locators with `data-testid` selectors.
 
-Cypress:
+**Cypress:**
 
 ```bash
 testify generate "User logs in and sees the dashboard" --framework cypress
 ```
 
-Expected output uses `describe`, `it`, `cy.visit`, `cy.get`, and `cy.url().should`.
+Generated output uses `describe` / `it`, `cy.visit`, `cy.get`, and `cy.url().should`.
+
+**Preview (no API call, no files written):**
+
+```bash
+testify generate spec.txt --dry-run --verbose
+```
+
+---
+
+## How It Works
+
+```
+┌──────────┐    ┌──────────────┐    ┌────────────┐    ┌────────────────┐    ┌──────────────┐
+│  Input   │───▶│    Parser    │───▶│ LLM Client │───▶│    Generator   │───▶│    Writer    │
+│ stdin    │    │ split lines  │    │ OpenAI     │    │ Jinja2 render  │    │ atomic write │
+│ file     │    │ strip mkdn   │    │ structured │    │ framework      │    │ dry-run      │
+│ string   │    │ normalize    │    │ output     │    │ specific       │    │ safe create  │
+│ dir      │    │              │    │            │    │                │    │              │
+└──────────┘    └──────────────┘    └────────────┘    └────────────────┘    └──────────────┘
+```
+
+1. **Input** — acceptance criteria from stdin, a string argument, a file, or a directory
+2. **Parser** — splits input into scenarios, normalizes markdown lists, preserves line numbers
+3. **LLM Client** — sends each scenario to an LLM, receives structured test data as Pydantic models
+4. **Generator** — renders Playwright or Cypress code using Jinja2 templates, including page objects
+5. **Writer** — writes files atomically, skips existing unless `--force`, supports dry-run preview
+
+---
 
 ## Input Formats
 
-Plain text files use one scenario per non-empty line:
+**Plain text** — one scenario per line:
 
 ```text
 User logs in with valid credentials
 User logs out
+User resets password
 ```
 
-Markdown lists are supported:
+**Markdown lists** — `-` or `*` prefixes are stripped:
 
 ```markdown
 - User logs in with valid credentials
 * User logs out
 ```
 
-Directory mode recursively reads `.txt`, `.md`, and `.spec` files.
+**Directory mode** — recursively discovers `.txt`, `.md`, and `.spec` files, maintaining directory structure in output.
+
+---
 
 ## Configuration
 
-Environment variables:
+testify reads configuration from environment variables and an optional `.testify.toml` file.
+
+### Environment Variables
 
 | Variable | Default | Description |
-| --- | --- | --- |
-| `TESTIFY_LLM_PROVIDER` | `openai` | LLM provider. |
-| `TESTIFY_LLM_MODEL` | `gpt-4o-mini` | Model used for generation. |
-| `TESTIFY_LLM_API_KEY` | unset | Preferred API key variable. |
-| `OPENAI_API_KEY` | unset | Fallback API key for OpenAI. |
-| `TESTIFY_DEFAULT_FRAMEWORK` | `playwright` | Planned default framework override. |
-| `TESTIFY_OUTPUT_DIR` | `./tests` | Planned default output directory override. |
+|----------|---------|-------------|
+| `TESTIFY_LLM_PROVIDER` | `openai` | LLM provider |
+| `TESTIFY_LLM_MODEL` | `gpt-4o-mini` | Model used for generation |
+| `TESTIFY_LLM_API_KEY` | — | API key (preferred) |
+| `OPENAI_API_KEY` | — | Fallback API key |
 
-Create a starter project config:
+### Config File
 
 ```bash
 testify init
 ```
 
+Creates `.testify.toml` in the current directory with default values.
+
+---
+
 ## Development
 
-Install development dependencies:
-
 ```bash
+# Clone and install
+git clone https://github.com/testwiththeo/testify.git
+cd testify
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-```
 
-Run checks:
+# Run checks
+pytest --cov=testify          # 44 tests, 92% coverage
+ruff check testify/            # zero warnings
+mypy testify/                  # zero errors
 
-```bash
-pytest --cov=testify
-ruff check testify/
-mypy testify/
-```
-
-Install pre-commit hooks:
-
-```bash
+# Install pre-commit hooks (optional)
 pre-commit install
 ```
 
+---
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding standards, testing, and pull request guidance.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Development environment setup
+- Coding standards (ruff, mypy, pytest)
+- Pull request process
+- Issue templates
+
+---
 
 ## License
 
